@@ -2,23 +2,16 @@
 =============================================================
   ONCF Z2M — Système de Supervision VFD
   Fichier  : App.js
-  Rôle     : Dashboard React temps réel (Version Pro avec Delta T)
+  Rôle     : Dashboard React temps réel
   Auteur   : PFE 2024-2025
-  Version  : 3.0
+  Version  : 2.0
 =============================================================
 */
 
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // ─── Configuration ────────────────────────────────────────
-const getApiUrl = () => {
-  if (window.location.hostname === "localhost" && window.location.port === "3000") {
-    return "http://localhost:8000/data";
-  }
-  return `${window.location.protocol}//${window.location.host}/data`;
-};
-
-const API_URL        = getApiUrl();
+const API_URL        = "http://localhost:8000/data";
 const POLL_INTERVAL  = 1000;   // ms
 const HISTORY_MAX    = 30;     // points dans le graphe
 const ALARM_TEMP     = 45;     // °C
@@ -28,6 +21,7 @@ const WARN_PRESSION  = 18;     // Bar
 
 // ─── Styles CSS-in-JS ────────────────────────────────────
 const S = {
+  /* Fond dégradé sombre */
   app: {
     minHeight: "100vh",
     background: "linear-gradient(135deg, #0a0f1e 0%, #0d1b2a 50%, #0a1628 100%)",
@@ -36,6 +30,8 @@ const S = {
     padding: "24px 20px",
     boxSizing: "border-box",
   },
+
+  /* En-tête */
   header: {
     display: "flex",
     alignItems: "center",
@@ -54,6 +50,8 @@ const S = {
   },
   title: { margin: 0, fontSize: "20px", fontWeight: "700", color: "#f1f5f9", lineHeight: 1.2 },
   subtitle: { margin: 0, fontSize: "13px", color: "#64748b", marginTop: "2px" },
+
+  /* Badges de statut connexion */
   statusBadge: (online) => ({
     display: "flex", alignItems: "center", gap: "7px",
     padding: "6px 14px", borderRadius: "20px", fontSize: "12px", fontWeight: "600",
@@ -66,12 +64,16 @@ const S = {
     background: online ? "#10b981" : "#ef4444",
     animation: online ? "pulse 1.5s ease-in-out infinite" : "none",
   }),
+
+  /* Grille de cards */
   grid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
     gap: "16px",
     marginBottom: "20px",
   },
+
+  /* Card glassmorphism */
   card: (alarm, warn) => ({
     background: alarm
       ? "rgba(239,68,68,0.08)"
@@ -90,6 +92,7 @@ const S = {
     position: "relative",
     overflow: "hidden",
   }),
+
   cardGlow: (alarm, warn) => ({
     position: "absolute", top: 0, left: 0, right: 0, height: "3px",
     borderRadius: "16px 16px 0 0",
@@ -99,6 +102,7 @@ const S = {
       ? "linear-gradient(90deg, #f59e0b, #d97706)"
       : "linear-gradient(90deg, #3b82f6, #1d4ed8)",
   }),
+
   cardIcon: { fontSize: "26px", marginBottom: "12px", display: "block" },
   cardLabel: { fontSize: "12px", color: "#64748b", fontWeight: "600",
     textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "6px" },
@@ -109,6 +113,8 @@ const S = {
   }),
   cardUnit: { fontSize: "18px", fontWeight: "400", color: "#94a3b8", marginLeft: "4px" },
   cardSub: { fontSize: "12px", color: "#475569", marginTop: "6px" },
+
+  /* Alarme badge */
   alarmBadge: {
     display: "inline-flex", alignItems: "center", gap: "5px",
     marginTop: "10px", padding: "4px 10px", borderRadius: "8px",
@@ -123,6 +129,8 @@ const S = {
     fontSize: "11px", fontWeight: "600",
     border: "1px solid rgba(234,179,8,0.2)",
   },
+
+  /* Ventilateurs — icônes visuelles */
   moteurs: {
     display: "flex", gap: "8px", marginTop: "8px",
   },
@@ -136,6 +144,8 @@ const S = {
     transition: "all 0.3s",
     animation: actif ? "spin 1.5s linear infinite" : "none",
   }),
+
+  /* Barre de progression */
   progressBar: { marginTop: "12px" },
   progressTrack: {
     height: "5px", borderRadius: "3px",
@@ -155,6 +165,8 @@ const S = {
     display: "flex", justifyContent: "space-between",
     fontSize: "10px", color: "#475569", marginTop: "3px",
   },
+
+  /* Section graphe historique */
   historySection: {
     background: "rgba(255,255,255,0.03)",
     border: "1px solid rgba(255,255,255,0.07)",
@@ -163,7 +175,11 @@ const S = {
   },
   historyTitle: { fontSize: "13px", fontWeight: "600", color: "#94a3b8",
     textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "14px" },
+
+  /* Footer */
   footer: { textAlign: "center", fontSize: "11px", color: "#334155", marginTop: "8px" },
+
+  /* Mode source badge */
   modeBadge: (mode) => ({
     fontSize: "11px", padding: "3px 9px", borderRadius: "6px", fontWeight: "500",
     background: mode === "arduino"
@@ -250,11 +266,11 @@ function SensorCard({ icon, label, value, unit, sub, alarm, warn, pct, pctMin, p
 export default function App() {
   const [data,    setData]    = useState(null);
   const [online,  setOnline]  = useState(false);
-  const [history, setHistory] = useState({ temp_in: [], pressure: [], freq: [] });
+  const [history, setHistory] = useState({ temp: [], pressure: [], freq: [] });
   const [lastUpdate, setLastUpdate] = useState(null);
   const intervalRef = useRef(null);
 
-  // Injection CSS globale
+  // Injection CSS globale une seule fois
   useEffect(() => {
     const style = document.createElement("style");
     style.textContent = globalCSS;
@@ -273,7 +289,7 @@ export default function App() {
       setOnline(true);
       setLastUpdate(new Date().toLocaleTimeString("fr-FR"));
       setHistory(prev => ({
-        temp_in:  [...prev.temp_in.slice(-(HISTORY_MAX-1)),  json.temp_in],
+        temp:     [...prev.temp.slice(-(HISTORY_MAX-1)),     json.temp],
         pressure: [...prev.pressure.slice(-(HISTORY_MAX-1)), json.pressure],
         freq:     [...prev.freq.slice(-(HISTORY_MAX-1)),     json.freq],
       }));
@@ -289,22 +305,18 @@ export default function App() {
   }, [fetchData]);
 
   // Dérivations
-  const temp_in    = data?.temp_in    ?? null;
-  const temp_out   = data?.temp_out   ?? null;
-  const delta_t    = data?.delta_t    ?? null;
-  const efficiency = data?.efficiency ?? null;
-  const pressure   = data?.pressure   ?? null;
-  const motors     = data?.motors     ?? 0;
-  const freq       = data?.freq       ?? null;
-  const mode       = data?.mode       ?? "simulation";
-  const clogged    = data?.clogged_alert ?? false;
+  const temp     = data?.temp     ?? null;
+  const pressure = data?.pressure ?? null;
+  const motors   = data?.motors   ?? 0;
+  const freq     = data?.freq     ?? null;
+  const mode     = data?.mode     ?? "simulation";
 
-  const alarmTemp   = temp_in  !== null && temp_in  > ALARM_TEMP;
+  const alarmTemp   = temp     !== null && temp     > ALARM_TEMP;
   const alarmPress  = pressure !== null && pressure > ALARM_PRESSION;
-  const warnTemp    = !alarmTemp  && temp_in  !== null && temp_in  > WARN_TEMP;
+  const warnTemp    = !alarmTemp  && temp     !== null && temp     > WARN_TEMP;
   const warnPress   = !alarmPress && pressure !== null && pressure > WARN_PRESSION;
 
-  const tempPct  = temp_in  !== null ? ((temp_in  - 35) / (55 - 35)) * 100 : 0;
+  const tempPct  = temp     !== null ? ((temp     - 35) / (50 - 35)) * 100 : 0;
   const pressPct = pressure !== null ? ((pressure - 10) / (25 - 10)) * 100 : 0;
   const freqPct  = freq     !== null ? ((freq     - 10) / (80 - 10)) * 100 : 0;
 
@@ -339,32 +351,18 @@ export default function App() {
       {/* ── 4 Cards capteurs ── */}
       <div style={S.grid}>
 
-        {/* Température Condenser */}
+        {/* Température */}
         <SensorCard
           icon="🌡️"
-          label="Temp. Condenser"
-          value={temp_in !== null ? temp_in.toFixed(1) : "--"}
+          label="Température moteur"
+          value={temp !== null ? temp.toFixed(1) : "--"}
           unit="°C"
-          sub={`Sortie: ${temp_out ? temp_out.toFixed(1) : "--"}°C | ΔT: ${delta_t ? delta_t.toFixed(1) : "--"}°C`}
+          sub={`Seuil alarme : ${ALARM_TEMP}°C  |  LM35`}
           alarm={alarmTemp}
           warn={warnTemp}
           pct={tempPct}
-          pctMin="Inlet"
-          pctMax="Limit 55°C"
-        />
-
-        {/* Efficacité Refroidissement */}
-        <SensorCard
-          icon="📊"
-          label="Efficacité Système"
-          value={efficiency !== null ? efficiency.toFixed(0) : "--"}
-          unit="%"
-          sub={clogged ? "⚠️ CONDENSEUR BOUCHÉ !" : "Flux d'air optimal"}
-          alarm={clogged}
-          warn={efficiency < 70}
-          pct={efficiency}
-          pctMin="Low"
-          pctMax="100%"
+          pctMin="35°C"
+          pctMax="50°C"
         />
 
         {/* Pression */}
@@ -381,6 +379,27 @@ export default function App() {
           pctMax="25 Bar"
         />
 
+        {/* Ventilateurs */}
+        <SensorCard
+          icon="💨"
+          label="Ventilateurs actifs"
+          value={motors}
+          unit="/ 3"
+          sub={motors === 0 ? "Arrêt — temp normale" : motors === 3 ? "Refroidissement max" : "Refroidissement partiel"}
+          alarm={false}
+          warn={false}
+          extra={
+            <div style={S.moteurs}>
+              {[1, 2, 3].map(i => (
+                <div key={i} style={S.moteurIcon(motors >= i)}>🌀</div>
+              ))}
+            </div>
+          }
+          pct={(motors / 3) * 100}
+          pctMin="0"
+          pctMax="3"
+        />
+
         {/* Fréquence VFD */}
         <SensorCard
           icon="⚡"
@@ -393,13 +412,6 @@ export default function App() {
           pct={freqPct}
           pctMin="10 Hz"
           pctMax="80 Hz"
-          extra={
-            <div style={S.moteurs}>
-              {[1, 2, 3].map(i => (
-                <div key={i} style={S.moteurIcon(motors >= i)}>🌀</div>
-              ))}
-            </div>
-          }
         />
 
       </div>
@@ -410,9 +422,9 @@ export default function App() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "20px" }}>
           <div>
             <div style={{ fontSize: "11px", color: "#64748b", marginBottom: "4px" }}>
-              Température Inlet (°C)
+              Température (°C)
             </div>
-            <MiniGraph data={history.temp_in}   color="#f87171" min={35} max={55} />
+            <MiniGraph data={history.temp}     color="#f87171" min={35} max={50} />
           </div>
           <div>
             <div style={{ fontSize: "11px", color: "#64748b", marginBottom: "4px" }}>
@@ -430,7 +442,7 @@ export default function App() {
       </div>
 
       {/* ── Alarme globale ── */}
-      {(alarmTemp || alarmPress || clogged) && (
+      {(alarmTemp || alarmPress) && (
         <div style={{
           background: "rgba(239,68,68,0.1)",
           border: "1px solid rgba(239,68,68,0.35)",
@@ -444,9 +456,8 @@ export default function App() {
               ALARME ACTIVE — Intervention requise
             </div>
             <div style={{ fontSize: "12px", color: "#ef4444", marginTop: "2px" }}>
-              {clogged    && "⚠️ DÉFAUT : ÉCHANGE THERMIQUE INSUFFISANT (Vérifier Condenseur) "}
-              {alarmTemp  && `Température ${temp_in}°C > ${ALARM_TEMP}°C `}
-              {alarmPress && `Pression ${pressure} Bar > ${ALARM_PRESSION} Bar`}
+              {alarmTemp  && `Température ${temp}°C > seuil ${ALARM_TEMP}°C   `}
+              {alarmPress && `Pression ${pressure} Bar > seuil ${ALARM_PRESSION} Bar`}
             </div>
           </div>
         </div>

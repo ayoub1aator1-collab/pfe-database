@@ -1,0 +1,6 @@
+pyserial
+fastapi
+uvicorn
+openpyxl
+pymysql
+requests

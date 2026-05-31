@@ -5,7 +5,7 @@
   Rôle     : Backend FastAPI — lecture Arduino / simulation
              + WebSocket, historique, export Excel,
              + contrôle manuel (sliders depuis React)
-  Auteur   : PFE 2024-2025
+  Auteur   : PFE 2025-2026
   Version  : 5.0
 =============================================================
 """
